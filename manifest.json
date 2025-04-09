@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "豆瓣图书信息复制器",
+  "version": "1.0",
+  "description": "一键复制豆瓣图书信息和封面图片",
+  "permissions": ["clipboardWrite", "scripting"],
+  "host_permissions": ["*://*.douban.com/*", "*://*.doubanio.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["*://book.douban.com/subject/*"],
+      "css": ["styles.css"],
+      "js": ["content.js"]
+    }
+  ],
+  "icons": {
+    "128": "icon.png"
+  }
+}
