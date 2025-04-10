@@ -10,54 +10,45 @@
   const style = document.createElement('style');
   style.textContent = `
     .copy-btn-group {
-      position: fixed !important;
-      left: 30px;
-      top: 30px;
-      z-index: 2147483647 !important;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      min-width: 120px;
-      backdrop-filter: blur(5px);
-      border: 2px solid #007722;
-      background: rgba(255,255,255,0.95);
-      padding: 20px;
-      animation: fadeIn 0.5s ease-out;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0,119,34,0.3);
-      isolation: isolate;
-      mix-blend-mode: normal;
-      pointer-events: auto;
-      cursor: move;
+      display: inline-flex;
+      flex-direction: row;
+      gap: 4px;
+      margin-left: 8px;
+      vertical-align: middle;
     }
     .copy-btn {
-      display: block;
-      width: 100px;
-      padding: 8px 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
       background: #007722;
       color: white;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      margin: 5px 0;
       font-size: 14px;
-      transition: all 0.3s;
+      transition: all 0.2s;
+      margin: 0 2px;
     }
     .copy-btn:hover {
-      opacity: 1;
-      transform: translateY(-2px) scale(1.05);
-      box-shadow: 0 4px 12px rgba(0,119,34,0.4);
+      opacity: 0.9;
+      transform: scale(1.05);
+      box-shadow: 0 1px 3px rgba(0,119,34,0.3);
     }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(-20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
+    /* 状态消息样式 */
     .loading, .success, .error {
-      padding: 8px;
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 4px 8px;
       border-radius: 4px;
-      margin-top: 10px;
+      margin-top: 5px;
       text-align: center;
-      font-size: 12px;
+      font-size: 11px;
+      white-space: nowrap;
+      z-index: 100;
     }
     .loading { background: #f0f9ff; color: #007722; }
     .success { background: #e6ffe6; color: #009900; }
@@ -66,25 +57,47 @@
   document.head.appendChild(style);
 
   // 创建按钮容器
-  let btnGroup = document.createElement('div'); // 改为let声明
+  let btnGroup = document.createElement('div');
   btnGroup.className = 'copy-btn-group';
   btnGroup.innerHTML = `
-    <button class="copy-btn" id="copyText">复制信息</button>
-    <button class="copy-btn" id="copyImage">复制封面</button>
+    <button class="copy-btn" id="copyText" title="复制图书信息">📋</button>
+    <button class="copy-btn" id="copyImage" title="复制封面图片">🖼️</button>
   `;
 
-  document.body.insertAdjacentElement('afterbegin', btnGroup);
+  // 将按钮插入到书名后面
+  const insertButtons = () => {
+    const titleEl = document.querySelector('#wrapper h1 span');
+    if (titleEl) {
+      titleEl.insertAdjacentElement('afterend', btnGroup);
+      return true;
+    }
+    return false;
+  };
 
-  // DOM观察器
+  // 尝试插入按钮，如果页面还没加载完成，则等待DOM加载后再尝试
+  if (!insertButtons()) {
+    window.addEventListener('DOMContentLoaded', insertButtons);
+    // 如果DOMContentLoaded已经触发，使用MutationObserver监听DOM变化
+    const observer = new MutationObserver((mutations, observer) => {
+      if (insertButtons()) {
+        observer.disconnect(); // 成功插入后停止观察
+      }
+    });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+  }
+
+  // DOM观察器 - 确保按钮不被移除
   const btnObserver = new MutationObserver((mutations) => {
     mutations.forEach(mutation => {
       if (!document.contains(btnGroup)) {
         console.log('检测到容器被移除，重建按钮组');
         const newBtnGroup = btnGroup.cloneNode(true);
-        document.documentElement.prepend(newBtnGroup);
         btnGroup = newBtnGroup;
+        insertButtons();
         addEventListeners();
-        initDrag(btnGroup); // 重新初始化拖拽功能
       }
     });
   });
@@ -128,23 +141,41 @@
       const titleEl = await waitForElement('#wrapper h1 span');
       const title = titleEl.innerText.replace(/\s+/g, ' ').trim();
 
-      const introSections = Array.from(document.querySelectorAll('.mod'))
-        .flatMap(mod => {
-          const header = mod.querySelector('h2');
-          if (!header || !/内容简介|作者简介/.test(header.textContent)) return [];
+      console.log('开始获取内容简介...');
+      
+      // 根据调试信息，直接获取.related_info .intro的第二个元素(索引1)作为内容简介
+      const relatedInfoIntros = document.querySelectorAll('.related_info .intro');
+      console.log('找到元素数量:', relatedInfoIntros.length);
+      
+      let introText = '暂无简介';
+      
+      // 如果存在索引为1的元素，则使用它
+      if (relatedInfoIntros.length > 1) {
+        const targetIntro = relatedInfoIntros[1]; // 获取索引为1的元素
+        
+        // 如果是容器元素，获取其中的段落
+        const paragraphs = Array.from(targetIntro.querySelectorAll('p'));
+        if (paragraphs.length > 0) {
+          introText = paragraphs.map(p => p.textContent).join('\n');
+        } else {
+          // 如果没有段落，直接获取容器文本
+          introText = targetIntro.textContent;
+        }
+        
+        // 清理文本
+        introText = introText
+          .replace(/[\s\u3000\u200B]+/g, ' ')
+          .replace(/(\（.*?\）|\[\d+\]|【.*?】|展开全部|更多→|\u00a0)/g, '')
+          .trim();
           
-          return Array.from(mod.querySelectorAll('p'))
-            .map(p => p.textContent
-              .replace(/[\s\u3000\u200B]+/g, ' ')
-              .replace(/(\（.*?\）|\[\d+\]|【.*?】|展开全部|更多→|\u00a0)/g, '')
-              .trim()
-            )
-            .filter(text => text.length > 30);
-        });
-
+        console.log(`获取到的内容简介: ${introText.substring(0, 50)}...`);
+      } else {
+        console.log('未找到目标内容简介元素');
+      }
+      
       return {
         title,
-        desc: introSections.join('\n\n') || '暂无简介'
+        desc: introText
       };
     } catch (error) {
       console.error('信息采集失败:', error);
@@ -202,56 +233,5 @@
     console.error('脚本错误:', e);
     showMessage('error', `发生错误: ${e.message}`);
   });
-  // 拖拽功能实现
-  const initDrag = (container) => {
-    let isDragging = false;
-    let startX, startY, initialLeft, initialTop;
-
-    const handleMove = (e) => {
-      if (!isDragging) return;
-      
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      
-      let newLeft = initialLeft + dx;
-      let newTop = initialTop + dy;
-      
-      // 边界限制
-      const maxLeft = window.innerWidth - container.offsetWidth;
-      const maxTop = window.innerHeight - container.offsetHeight;
-      newLeft = Math.max(10, Math.min(newLeft, maxLeft - 10));
-      newTop = Math.max(10, Math.min(newTop, maxTop - 10));
-      
-      container.style.left = `${newLeft}px`;
-      container.style.top = `${newTop}px`;
-    };
-
-    const handleUp = () => {
-      isDragging = false;
-      container.style.opacity = '';
-      container.style.cursor = '';
-      document.body.style.userSelect = '';
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', handleUp);
-    };
-
-    container.addEventListener('mousedown', (e) => {
-      if (e.target.classList.contains('copy-btn')) return;
-      
-      isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      initialLeft = container.offsetLeft;
-      initialTop = container.offsetTop;
-      container.style.opacity = '0.8';
-      container.style.cursor = 'grabbing';
-      document.body.style.userSelect = 'none';
-      document.addEventListener('mousemove', handleMove);
-      document.addEventListener('mouseup', handleUp);
-      e.preventDefault();
-    });
-  };
-
-  // 初始化拖拽功能
-  initDrag(btnGroup);
+  // 全局错误处理结束
 })();
