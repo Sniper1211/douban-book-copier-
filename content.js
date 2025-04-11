@@ -15,6 +15,7 @@
       gap: 4px;
       margin-left: 8px;
       vertical-align: middle;
+      position: relative;
     }
     .copy-btn {
       display: inline-flex;
@@ -49,8 +50,33 @@
       font-size: 11px;
       white-space: nowrap;
       z-index: 100;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      animation: fadeIn 0.2s ease-in-out;
     }
-    .loading { background: #f0f9ff; color: #007722; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(-5px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+    .loading { 
+      background: #f0f9ff; 
+      color: #007722; 
+      display: flex;
+      align-items: center;
+    }
+    .loading:before {
+      content: '';
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-right: 5px;
+      border: 2px solid #007722;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
     .success { background: #e6ffe6; color: #009900; }
     .error { background: #ffe6e6; color: #cc0000; }
   `;
@@ -186,17 +212,30 @@
 
   // 显示状态消息
   const showMessage = (type, text) => {
+    // 移除之前的消息
+    const existingMessages = btnGroup.querySelectorAll('.loading, .success, .error');
+    existingMessages.forEach(msg => msg.remove());
+    
     const message = document.createElement('div');
     message.className = type;
     message.textContent = text;
     btnGroup.appendChild(message);
-    setTimeout(() => message.remove(), 3000);
+    
+    // 如果不是加载状态，3秒后自动移除
+    if (type !== 'loading') {
+      setTimeout(() => message.remove(), 3000);
+    }
+    
+    return message; // 返回消息元素，以便后续可以移除
   };
 
   // 事件绑定函数
   const addEventListeners = () => {
     document.getElementById('copyText').addEventListener('click', async () => {
+      const loadingMsg = showMessage('loading', '正在获取图书信息...');
       const info = await getBookInfo();
+      loadingMsg.remove(); // 移除加载消息
+      
       if (!info) return;
 
       try {
@@ -209,15 +248,22 @@
 
     document.getElementById('copyImage').addEventListener('click', async () => {
       try {
-        showMessage('loading', '正在加载封面...');
+        const loadingMsg = showMessage('loading', '正在加载封面...');
         const imgUrl = fetchCoverImage();
-        if (!imgUrl) throw new Error('封面地址获取失败');
+        if (!imgUrl) {
+          loadingMsg.remove();
+          throw new Error('封面地址获取失败');
+        }
 
         const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(imgUrl)}`);
-        if (!response.ok) throw new Error(`HTTP错误: ${response.status}`);
+        if (!response.ok) {
+          loadingMsg.remove();
+          throw new Error(`HTTP错误: ${response.status}`);
+        }
 
         const blob = await response.blob();
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        loadingMsg.remove(); // 移除加载消息
         showMessage('success', '封面图已复制');
       } catch (err) {
         showMessage('error', `复制失败: ${err.message}`);
